@@ -139,6 +139,21 @@ immediately distinguishable, even in black and white:
 - **Rough Brush** — dry brush. Separate bristle tracks that lift off the paper,
   broken edges, missing-pigment gaps, uneven pressure response.
 
+### Dual export — Faithful vs Clean (`lib/exporter.ts`, `lib/trace.ts`)
+
+The canvas is the source of truth. **Faithful Ink Export** marching-squares-traces
+the *actual rendered ink coverage field* (the same one shown on screen) into
+vector paths, so edge irregularities, bleeding, dry-brush gaps, marker streaks,
+pressure variation and calligraphic contrast survive — the SVG looks like the
+artwork, not a generic smooth curve (it emits dense polyline texture + tonal
+bands, higher node count by design). **Clean Logo Export** uses the optimized
+Bézier outliner (minimal anchors) for a geometric mark. Both lay out onto the
+chosen artboard at real-world size and export to SVG / PDF / EPS / PNG.
+
+**Logo Master Export** runs once and produces a full package (faithful SVG,
+clean SVG, print PDF, transparent PNG, monochrome, inverted, outlined, EPS
+source + README) as a single dependency-free `.zip`.
+
 ### Vector preservation
 
 Even as ink spreads organically, the **gesture polyline** is recorded
@@ -157,7 +172,8 @@ Illustrator, Figma and Inkscape.
 | InkBleed Lab | Pigment load, **pigment density, ink darkness, saturation, drying contrast, black point**, edge darkening, feathering noise, drying speed, brush water load — all live |
 | Pigment optics | Subtractive Beer–Lambert compositing (not alpha): rich blacks, true overlap darkening, deterministic undo/redo |
 | Vectorize | RDP, optimized Béziers, minimal anchors, 7 interpretation modes, path-simplification slider |
-| Export | SVG · PDF · EPS (true vector) · transparent PNG · 4K PNG — crisp at any scale |
+| Artboard | Presets (A0–A6, Letter/Legal/Tabloid, social, Poster, Billboard) + custom W/H in px/mm/cm/in, 72–1200 DPI |
+| Export | Dual engine — Faithful Ink (traces real ink) or Clean Logo (optimized Bézier) · SVG / PDF / EPS / transparent PNG / DPI PNG · Logo Master ZIP bundle |
 | UI | Dark / light, keyboard shortcuts, live stats |
 
 ### Shortcuts

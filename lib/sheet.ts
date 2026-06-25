@@ -1,57 +1,33 @@
-import type { BrushSettings, BrushStyle } from "./types";
+import { workingSheet, simSize } from "./artboard";
 
-/** Paper sheet size in world units. */
-export const SHEET_W = 1240;
-export const SHEET_H = 1750; // ISO-ish portrait sheet
+/**
+ * Current working-sheet + simulation dimensions in world units / sim cells.
+ * Mutable: `setSheet(aspect)` reshapes it when the artboard changes. The drawing
+ * resolution stays constant; only the aspect ratio follows the artboard.
+ */
+export const SHEET = {
+  w: 1240,
+  h: 1750,
+  simW: 372,
+  simH: 525,
+  scale: 372 / 1240,
+};
 
-/** Simulation grid resolution (decoupled from display for performance). */
-export const SIM_W = 372;
-export const SIM_H = 525;
+/** Reshape the sheet + sim grid to a new aspect ratio. Returns whether it changed. */
+export function setSheet(aspect: number): boolean {
+  const ws = workingSheet(aspect);
+  const ss = simSize(aspect);
+  if (ws.w === SHEET.w && ws.h === SHEET.h && ss.w === SHEET.simW && ss.h === SHEET.simH)
+    return false;
+  SHEET.w = ws.w;
+  SHEET.h = ws.h;
+  SHEET.simW = ss.w;
+  SHEET.simH = ss.h;
+  SHEET.scale = (ss.w / ws.w + ss.h / ws.h) / 2;
+  return true;
+}
 
 export const worldToSim = (x: number, y: number) => ({
-  sx: (x / SHEET_W) * SIM_W,
-  sy: (y / SHEET_H) * SIM_H,
+  sx: (x / SHEET.w) * SHEET.simW,
+  sy: (y / SHEET.h) * SHEET.simH,
 });
-
-/** Average world->sim scale, for converting a brush radius. */
-export const SIM_SCALE = (SIM_W / SHEET_W + SIM_H / SHEET_H) / 2;
-
-export interface DepositOpts {
-  water: number;
-  pigment: number;
-  noise: number;
-}
-
-/** Map a brush style + settings onto ink-deposit behaviour. */
-export function brushDeposit(brush: BrushSettings): DepositOpts {
-  const wet = brush.wet;
-  const bleed = brush.bleed;
-  const byStyle: Record<BrushStyle, DepositOpts> = {
-    inkbleed: {
-      water: 0.5 + wet * 1.0 + bleed * 0.4,
-      pigment: 0.9,
-      noise: 0.2 + bleed * 0.3,
-    },
-    marker: {
-      water: 0.25 + wet * 0.4,
-      pigment: 1.25,
-      noise: 0.1,
-    },
-    pencil: {
-      water: 0.04 + wet * 0.1,
-      pigment: 0.7,
-      noise: 0.85,
-    },
-    calligraphy: {
-      water: 0.4 + wet * 0.8,
-      pigment: 1.05,
-      noise: 0.15,
-    },
-    rough: {
-      water: 0.3 + wet * 0.7,
-      pigment: 0.9,
-      noise: 0.9,
-    },
-  };
-  return byStyle[brush.style];
-}

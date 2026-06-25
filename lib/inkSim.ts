@@ -1,6 +1,6 @@
 import type { PaperParams, InkParams } from "./paper";
 import type { Stroke, BrushStyle } from "./types";
-import { worldToSim, SIM_SCALE } from "./sheet";
+import { worldToSim, SHEET } from "./sheet";
 
 /**
  * Deterministic ink-on-paper renderer with per-brush physics.
@@ -198,7 +198,7 @@ export class InkSim {
 
     this.eachSegment(stroke, (ax, ay, bx, by, pr) => {
       const coreR =
-        Math.max(0.7, stroke.brush.size * SIM_SCALE * (0.32 + 0.68 * pr) * 0.5);
+        Math.max(0.7, stroke.brush.size * SHEET.scale * (0.32 + 0.68 * pr) * 0.5);
       const bleedR = coreR * (1 + spread * spreadEase) + 0.8;
       const coreFrac = Math.min(0.9, coreR / bleedR);
       const amt = this.ink.pigment * dryMul * pr * 0.5;
@@ -232,7 +232,7 @@ export class InkSim {
     const dryMul = lerp(0.9, 1, dryness);
     this.eachSegment(stroke, (ax, ay, bx, by, pr) => {
       // pressure drives WIDTH far more than opacity
-      const halfW = Math.max(0.8, stroke.brush.size * SIM_SCALE * (0.28 + 0.72 * pr) * 0.6);
+      const halfW = Math.max(0.8, stroke.brush.size * SHEET.scale * (0.28 + 0.72 * pr) * 0.6);
       const amt = this.ink.pigment * 0.9 * dryMul; // near-constant coverage
       this.capsule(ax, ay, bx, by, halfW + 0.6, (i, x, y, perp) => {
         const edge = perp / (halfW + 0.6);
@@ -260,7 +260,7 @@ export class InkSim {
       // tilt -> broad, light shading; upright -> narrow, dark line
       const broad = tiltMag; // 0..1
       const halfW =
-        Math.max(0.7, stroke.brush.size * SIM_SCALE * 0.42) * (0.5 + 0.5 * pr) *
+        Math.max(0.7, stroke.brush.size * SHEET.scale * 0.42) * (0.5 + 0.5 * pr) *
         (1 + broad * 2.2);
       const dark = (0.25 + 0.75 * pr) * (1 - broad * 0.5);
       const amt = this.ink.pigment * 0.85 * dark;
@@ -285,7 +285,7 @@ export class InkSim {
     const nib = stroke.brush.angle;
     const nx = Math.cos(nib);
     const ny = Math.sin(nib);
-    const half = Math.max(1.2, stroke.brush.size * SIM_SCALE * 0.85); // nib length/2
+    const half = Math.max(1.2, stroke.brush.size * SHEET.scale * 0.85); // nib length/2
     const thin = Math.max(0.5, half * 0.16); // nib thickness
     const dryMul = lerp(1 - this.ink.dryingContrast * 0.3, 1, dryness);
     const amt = this.ink.pigment * 0.95 * dryMul;
@@ -328,7 +328,7 @@ export class InkSim {
       const diry = (by - ay) / len;
       const px = -diry;
       const py = dirx; // motion normal
-      const halfW = Math.max(1, stroke.brush.size * SIM_SCALE * (0.4 + 0.6 * pr) * 0.6);
+      const halfW = Math.max(1, stroke.brush.size * SHEET.scale * (0.4 + 0.6 * pr) * 0.6);
       const amt = this.ink.pigment * 0.85;
       // fewer bristles make contact at low pressure -> more broken
       const contact = 0.35 + 0.65 * pr;
@@ -369,7 +369,7 @@ export class InkSim {
   ) {
     const pts = stroke.points;
     if (pts.length === 0) return;
-    const r0 = Math.max(0.7, stroke.brush.size * SIM_SCALE * 0.5);
+    const r0 = Math.max(0.7, stroke.brush.size * SHEET.scale * 0.5);
     const step = Math.max(0.8, r0 * 0.8);
     if (pts.length === 1) {
       const a = worldToSim(pts[0].x, pts[0].y);
@@ -447,6 +447,61 @@ export class InkSim {
   hasInk(strokes: Stroke[]): boolean {
     return strokes.length > 0;
   }
+
+  /**
+   * Per-cell ink coverage (0..1) + pigment-weighted dominant ink colour,
+   * derived with the same Beer–Lambert response used on screen. This is the
+   * field the Faithful Ink Export traces, so the SVG matches the canvas.
+   */
+  coverage(): {
+    cov: Float32Array;
+    color: [number, number, number];
+    w: number;
+    h: number;
+  } {
+    const { N, pig, cr, cg, cb } = this;
+    const cov = new Float32Array(N);
+    const K = 4.5 * (0.4 + this.ink.density) * (1 + this.ink.darkness * 1.6);
+    const bpExp = 1 + this.ink.blackPoint * 2.4;
+    let sr = 0,
+      sg = 0,
+      sb = 0,
+      sp = 0;
+    for (let i = 0; i < N; i++) {
+      const P = pig[i];
+      if (P < 1e-4) continue;
+      const hr = cr[i] / P;
+      const hg = cg[i] / P;
+      const hb = cb[i] / P;
+      const k = K * P;
+      const Tr = Math.pow(Math.exp(-k * (1 - hr / 255)), bpExp);
+      const Tg = Math.pow(Math.exp(-k * (1 - hg / 255)), bpExp);
+      const Tb = Math.pow(Math.exp(-k * (1 - hb / 255)), bpExp);
+      cov[i] = 1 - (0.299 * Tr + 0.587 * Tg + 0.114 * Tb);
+      sr += cr[i];
+      sg += cg[i];
+      sb += cb[i];
+      sp += P;
+    }
+    const color: [number, number, number] =
+      sp > 0 ? [sr / sp, sg / sp, sb / sp] : [10, 10, 10];
+    return { cov, color, w: this.w, h: this.h };
+  }
+}
+
+/** Render strokes into a fresh, fully-dried field — used by exporters. */
+export function renderDryField(
+  simW: number,
+  simH: number,
+  paper: PaperParams,
+  ink: InkParams,
+  strokes: Stroke[]
+): InkSim {
+  const sim = new InkSim(simW, simH);
+  sim.setPaper(paper);
+  sim.setInk(ink);
+  sim.render(strokes, [], 1e15); // huge `now` => everything dry
+  return sim;
 }
 
 // ---- helpers ----

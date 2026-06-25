@@ -66,6 +66,8 @@ export interface VectorPath {
   /** number of anchor points, for the stats readout */
   anchors: number;
   closed: boolean;
+  /** 0..1 fill opacity (faithful tonal layers); defaults to 1 */
+  opacity?: number;
 }
 
 export interface SymmetryConfig {

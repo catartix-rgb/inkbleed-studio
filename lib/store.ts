@@ -15,6 +15,10 @@ import {
   defaultInk,
   PAPERS,
 } from "./paper";
+import { type Artboard, type Unit, PRESETS, metrics } from "./artboard";
+import { setSheet } from "./sheet";
+
+export type ExportMode = "clean" | "faithful";
 
 export interface GridConfig {
   visible: boolean;
@@ -47,6 +51,14 @@ interface StudioState {
   ink: InkParams;
   /** bumped when the paper substrate must be rebuilt */
   paperRevision: number;
+
+  // ---- artboard & export ----
+  artboard: Artboard;
+  dpi: number;
+  exportMode: ExportMode;
+  /** bumped when the working sheet is reshaped (artboard aspect change) */
+  sheetRevision: number;
+
   /** bumped whenever geometry changes — consumers re-run vectorize */
   revision: number;
   /** bumped only on undo/redo/clear — tells the sim to rebuild from strokes */
@@ -76,7 +88,14 @@ interface StudioState {
   setPaperPreset: (id: string) => void;
   setPaperParam: (patch: Partial<PaperParams>) => void;
   setInkParam: (patch: Partial<InkParams>) => void;
+
+  setArtboard: (a: Artboard) => void;
+  setCustomArtboard: (w: number, h: number, unit: Unit) => void;
+  setDpi: (dpi: number) => void;
+  setExportMode: (m: ExportMode) => void;
 }
+
+const A4 = PRESETS.find((p) => p.id === "a4")!;
 
 const defaultBrush: BrushSettings = {
   style: "inkbleed",
@@ -111,6 +130,11 @@ export const useStudio = create<StudioState>((set) => ({
   paper: { ...getPaper(PAPERS[2].id).paper },
   ink: { ...defaultInk },
   paperRevision: 0,
+
+  artboard: { ...A4 },
+  dpi: 300,
+  exportMode: "faithful",
+  sheetRevision: 0,
 
   addStroke: (s) =>
     set((st) => ({
@@ -189,4 +213,35 @@ export const useStudio = create<StudioState>((set) => ({
       paperRevision: st.paperRevision + 1,
     })),
   setInkParam: (patch) => set((st) => ({ ink: { ...st.ink, ...patch } })),
+
+  setArtboard: (a) =>
+    set((st) => {
+      const m = metrics(a, st.dpi);
+      const changed = setSheet(m.aspect);
+      return {
+        artboard: a,
+        sheetRevision: changed ? st.sheetRevision + 1 : st.sheetRevision,
+        revision: st.revision + 1,
+      };
+    }),
+  setCustomArtboard: (w, h, unit) =>
+    set((st) => {
+      const a: Artboard = {
+        id: "custom",
+        label: "Custom",
+        w,
+        h,
+        unit,
+        category: "Custom",
+      };
+      const m = metrics(a, st.dpi);
+      const changed = setSheet(m.aspect);
+      return {
+        artboard: a,
+        sheetRevision: changed ? st.sheetRevision + 1 : st.sheetRevision,
+        revision: st.revision + 1,
+      };
+    }),
+  setDpi: (dpi) => set({ dpi }),
+  setExportMode: (m) => set({ exportMode: m }),
 }));

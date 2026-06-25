@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useStudio } from "@/lib/store";
 import { renderStroke } from "@/lib/brushEngine";
 import { InkSim } from "@/lib/inkSim";
-import { SHEET_W, SHEET_H, SIM_W, SIM_H } from "@/lib/sheet";
+import { SHEET } from "@/lib/sheet";
 import type { Point, Stroke } from "@/lib/types";
 
 let strokeCounter = 0;
@@ -23,6 +23,21 @@ export default function Canvas() {
   const sim = useRef<InkSim | null>(null);
   const simCanvas = useRef<HTMLCanvasElement | null>(null);
   const lastPaperRev = useRef(-1);
+  const lastSheetRev = useRef(0);
+
+  const fitView = () => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const scale = Math.min(
+      (wrap.clientWidth * 0.86) / SHEET.w,
+      (wrap.clientHeight * 0.9) / SHEET.h
+    );
+    useStudio.getState().setViewport({
+      scale,
+      x: (wrap.clientWidth - SHEET.w * scale) / 2,
+      y: (wrap.clientHeight - SHEET.h * scale) / 2,
+    });
+  };
 
   const markDirty = () => (dirty.current = true);
 
@@ -36,26 +51,26 @@ export default function Canvas() {
 
   // ---- one-time sim setup ----
   useEffect(() => {
-    const s = new InkSim(SIM_W, SIM_H);
+    const s = new InkSim(SHEET.simW, SHEET.simH);
     const st = useStudio.getState();
     s.setInk(st.ink);
     s.setPaper(st.paper);
     sim.current = s;
     const off = document.createElement("canvas");
-    off.width = SIM_W;
-    off.height = SIM_H;
+    off.width = SHEET.simW;
+    off.height = SHEET.simH;
     simCanvas.current = off;
     lastPaperRev.current = st.paperRevision;
     const wrap = wrapRef.current;
     if (wrap) {
       const scale = Math.min(
-        (wrap.clientWidth * 0.86) / SHEET_W,
-        (wrap.clientHeight * 0.9) / SHEET_H
+        (wrap.clientWidth * 0.86) / SHEET.w,
+        (wrap.clientHeight * 0.9) / SHEET.h
       );
       st.setViewport({
         scale,
-        x: (wrap.clientWidth - SHEET_W * scale) / 2,
-        y: (wrap.clientHeight - SHEET_H * scale) / 2,
+        x: (wrap.clientWidth - SHEET.w * scale) / 2,
+        y: (wrap.clientHeight - SHEET.h * scale) / 2,
       });
     }
     markDirty();
@@ -84,8 +99,23 @@ export default function Canvas() {
     const render = () => {
       raf = requestAnimationFrame(render);
       const st = useStudio.getState();
-      const s = sim.current;
 
+      // artboard reshaped -> rebuild the sim at the new aspect, refit the view
+      if (st.sheetRevision !== lastSheetRev.current) {
+        lastSheetRev.current = st.sheetRevision;
+        const ns = new InkSim(SHEET.simW, SHEET.simH);
+        ns.setInk(st.ink);
+        ns.setPaper(st.paper);
+        sim.current = ns;
+        const off = document.createElement("canvas");
+        off.width = SHEET.simW;
+        off.height = SHEET.simH;
+        simCanvas.current = off;
+        lastPaperRev.current = st.paperRevision;
+        fitView();
+        markDirty();
+      }
+      const s = sim.current;
       if (s && st.paperRevision !== lastPaperRev.current) {
         s.setPaper(st.paper);
         lastPaperRev.current = st.paperRevision;
@@ -114,7 +144,7 @@ export default function Canvas() {
       ctx.shadowBlur = 30 / st.viewport.scale;
       ctx.shadowOffsetY = 8 / st.viewport.scale;
       ctx.fillStyle = st.simEnabled ? st.paper.color : "#ffffff";
-      ctx.fillRect(0, 0, SHEET_W, SHEET_H);
+      ctx.fillRect(0, 0, SHEET.w, SHEET.h);
       ctx.restore();
 
       if (s && st.simEnabled) {
@@ -134,7 +164,7 @@ export default function Canvas() {
         off.getContext("2d")!.putImageData(image, 0, 0);
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(off, 0, 0, SIM_W, SIM_H, 0, 0, SHEET_W, SHEET_H);
+        ctx.drawImage(off, 0, 0, SHEET.simW, SHEET.simH, 0, 0, SHEET.w, SHEET.h);
       } else {
         animatingPrev.current = false;
         for (const stroke of st.strokes) renderStroke(ctx, stroke);
@@ -143,7 +173,7 @@ export default function Canvas() {
 
       ctx.strokeStyle = "rgba(0,0,0,0.12)";
       ctx.lineWidth = 1 / st.viewport.scale;
-      ctx.strokeRect(0, 0, SHEET_W, SHEET_H);
+      ctx.strokeRect(0, 0, SHEET.w, SHEET.h);
 
       drawGrid(ctx, st, dotColor);
       if (st.symmetry.enabled) drawSymmetryGuides(ctx, st, css);
@@ -349,8 +379,8 @@ function symmetryStrokes(
     id: stroke.id + "_sym" + idx++,
     points: stroke.points.map((p) => ({ ...p, ...fn(p.x, p.y) })),
   });
-  const cx = SHEET_W / 2;
-  const cy = SHEET_H / 2;
+  const cx = SHEET.w / 2;
+  const cy = SHEET.h / 2;
   const axes = Math.max(1, sym.axes);
   for (let a = 0; a < axes; a++) {
     const ang = (a / axes) * Math.PI * 2;
@@ -389,8 +419,8 @@ function drawGrid(
   ctx.save();
   ctx.fillStyle = dotColor;
   const r = 1 / st.viewport.scale;
-  for (let x = 0; x <= SHEET_W; x += size) {
-    for (let y = 0; y <= SHEET_H; y += size) {
+  for (let x = 0; x <= SHEET.w; x += size) {
+    for (let y = 0; y <= SHEET.h; y += size) {
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
@@ -405,13 +435,13 @@ function drawSymmetryGuides(
   css: CSSStyleDeclaration
 ) {
   const accent = css.getPropertyValue("--accent").trim() || "#ff4d2e";
-  const cx = SHEET_W / 2;
-  const cy = SHEET_H / 2;
+  const cx = SHEET.w / 2;
+  const cy = SHEET.h / 2;
   ctx.save();
   ctx.strokeStyle = accent;
   ctx.globalAlpha = 0.3;
   ctx.lineWidth = 1 / st.viewport.scale;
-  const len = Math.max(SHEET_W, SHEET_H);
+  const len = Math.max(SHEET.w, SHEET.h);
   const axes = Math.max(1, st.symmetry.axes);
   for (let a = 0; a < axes; a++) {
     const ang = (a / axes) * Math.PI;

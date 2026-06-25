@@ -22,20 +22,32 @@ export interface PaperParams {
 }
 
 export interface InkParams {
-  /** thickness — high viscosity flows slowly (0..1) */
+  /** thickness — high viscosity spreads slowly (0..1) */
   viscosity: number;
-  /** pigment carried per unit water (0..1) */
+  /** pigment load deposited by the brush (0..1) */
   pigment: number;
-  /** rate water soaks into paper, fixing pigment (0..1) */
+  /** how readily ink soaks / spreads into the paper (0..1) */
   absorption: number;
-  /** evaporation of surface water per tick (0..1) */
+  /** how quickly ink dries and reaches full richness (0..1) */
   drying: number;
-  /** extra global evaporation (0..1) */
+  /** residual evaporation tuning (0..1) */
   evaporation: number;
   /** pigment build-up at the drying rim (0..1) */
   edge: number;
-  /** stochastic perturbation of flow (0..1) */
+  /** ragged-edge / feathering noise (0..1) */
   noise: number;
+
+  // ---- pigment optics (deterministic compositor) ----
+  /** pigment density — how fast accumulated ink becomes opaque (0..1) */
+  density: number;
+  /** ink darkness — pushes dense ink toward deep black (0..1) */
+  darkness: number;
+  /** wet-to-dry darkening gap (0..1) */
+  dryingContrast: number;
+  /** black point — deepens shadows / kills faint grey haze (0..1) */
+  blackPoint: number;
+  /** ink saturation around luminance (0..2) */
+  saturation: number;
 }
 
 export interface PaperPreset {
@@ -149,10 +161,16 @@ export const getPaper = (id: string): PaperPreset =>
 
 export const defaultInk: InkParams = {
   viscosity: 0.35,
-  pigment: 0.7,
+  pigment: 0.85,
   absorption: 0.4,
-  drying: 0.25,
+  drying: 0.4,
   evaporation: 0.3,
   edge: 0.55,
-  noise: 0.4,
+  noise: 0.45,
+  // tuned for rich India / sumi ink with strong contrast
+  density: 0.7,
+  darkness: 0.45,
+  dryingContrast: 0.5,
+  blackPoint: 0.2,
+  saturation: 1,
 };

@@ -48,6 +48,8 @@ export interface Stroke {
   points: Point[];
   color: string;
   brush: BrushSettings;
+  /** ms timestamp (performance.now) when the stroke began — drives drying */
+  createdAt?: number;
 }
 
 /** A fitted vector path produced by the vectorizer */

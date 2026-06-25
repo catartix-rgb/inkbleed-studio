@@ -4,41 +4,25 @@ import { useEffect, useRef, useCallback } from "react";
 import { useStudio } from "@/lib/store";
 import { renderStroke } from "@/lib/brushEngine";
 import { InkSim } from "@/lib/inkSim";
-import {
-  SHEET_W,
-  SHEET_H,
-  SIM_W,
-  SIM_H,
-  SIM_SCALE,
-  worldToSim,
-  brushDeposit,
-} from "@/lib/sheet";
+import { SHEET_W, SHEET_H, SIM_W, SIM_H } from "@/lib/sheet";
 import type { Point, Stroke } from "@/lib/types";
 
 let strokeCounter = 0;
 const newId = () => `s${Date.now().toString(36)}_${strokeCounter++}`;
-
-function hexToRGB(hex: string): [number, number, number] {
-  const m = hex.replace("#", "");
-  const v = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
-  const int = parseInt(v || "0a0a0a", 16);
-  return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
-}
 
 export default function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const dirty = useRef(true);
   const current = useRef<Stroke | null>(null);
-  const lastDab = useRef<{ x: number; y: number } | null>(null);
   const drawingId = useRef<number | null>(null);
   const panning = useRef<{ x: number; y: number } | null>(null);
   const spaceDown = useRef(false);
+  const animatingPrev = useRef(false);
 
   const sim = useRef<InkSim | null>(null);
   const simCanvas = useRef<HTMLCanvasElement | null>(null);
   const lastPaperRev = useRef(-1);
-  const lastRebuild = useRef(0);
 
   const markDirty = () => (dirty.current = true);
 
@@ -62,7 +46,6 @@ export default function Canvas() {
     off.height = SIM_H;
     simCanvas.current = off;
     lastPaperRev.current = st.paperRevision;
-    // center the sheet in view on first mount
     const wrap = wrapRef.current;
     if (wrap) {
       const scale = Math.min(
@@ -78,16 +61,7 @@ export default function Canvas() {
     markDirty();
   }, []);
 
-  const rebuildSim = useCallback(() => {
-    const s = sim.current;
-    if (!s) return;
-    const st = useStudio.getState();
-    s.reset();
-    for (const stroke of st.strokes) stampStroke(s, stroke);
-    markDirty();
-  }, []);
-
-  // ---- render + simulation loop ----
+  // ---- render loop ----
   useEffect(() => {
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
@@ -112,26 +86,15 @@ export default function Canvas() {
       const st = useStudio.getState();
       const s = sim.current;
 
-      // paper rebuild on demand
       if (s && st.paperRevision !== lastPaperRev.current) {
         s.setPaper(st.paper);
         lastPaperRev.current = st.paperRevision;
         markDirty();
       }
-      // undo/redo/clear -> rebuild sim
-      if (st.rebuildSignal !== lastRebuild.current) {
-        lastRebuild.current = st.rebuildSignal;
-        rebuildSim();
-      }
+      if (s) s.setInk(st.ink);
 
-      // advance the physical simulation
-      let simChanged = false;
-      if (s && st.simEnabled) {
-        s.setInk(st.ink);
-        for (let k = 0; k < 2; k++) if (s.step()) simChanged = true;
-      }
-
-      if (!dirty.current && !simChanged && !current.current) return;
+      const drawing = !!current.current;
+      if (!dirty.current && !animatingPrev.current && !drawing) return;
       dirty.current = false;
 
       const dpr = (canvas as any)._dpr || 1;
@@ -145,28 +108,39 @@ export default function Canvas() {
       ctx.translate(st.viewport.x, st.viewport.y);
       ctx.scale(st.viewport.scale, st.viewport.scale);
 
-      // paper sheet
+      // paper sheet with soft drop shadow
       ctx.save();
       ctx.shadowColor = "rgba(0,0,0,0.25)";
       ctx.shadowBlur = 30 / st.viewport.scale;
       ctx.shadowOffsetY = 8 / st.viewport.scale;
-      ctx.fillStyle = st.simEnabled ? "#f7f5ef" : "#ffffff";
+      ctx.fillStyle = st.simEnabled ? st.paper.color : "#ffffff";
       ctx.fillRect(0, 0, SHEET_W, SHEET_H);
       ctx.restore();
 
       if (s && st.simEnabled) {
+        const live: Stroke[] = [];
+        if (current.current) {
+          live.push(current.current);
+          if (st.symmetry.enabled)
+            live.push(...symmetryStrokes(current.current, st.symmetry));
+        }
+        const { image, animating } = s.render(
+          st.strokes,
+          live,
+          performance.now()
+        );
+        animatingPrev.current = animating;
         const off = simCanvas.current!;
-        off.getContext("2d")!.putImageData(s.render(), 0, 0);
+        off.getContext("2d")!.putImageData(image, 0, 0);
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(off, 0, 0, SIM_W, SIM_H, 0, 0, SHEET_W, SHEET_H);
       } else {
-        // legacy flat ink mode
+        animatingPrev.current = false;
         for (const stroke of st.strokes) renderStroke(ctx, stroke);
         if (current.current) renderStroke(ctx, current.current);
       }
 
-      // sheet frame
       ctx.strokeStyle = "rgba(0,0,0,0.12)";
       ctx.lineWidth = 1 / st.viewport.scale;
       ctx.strokeRect(0, 0, SHEET_W, SHEET_H);
@@ -182,37 +156,7 @@ export default function Canvas() {
       ro.disconnect();
       unsub();
     };
-  }, [rebuildSim]);
-
-  // ---- ink deposition ----
-  const depositSegment = useCallback(
-    (from: { x: number; y: number }, to: { x: number; y: number }) => {
-      const s = sim.current;
-      const st = useStudio.getState();
-      if (!s || !st.simEnabled) return;
-      const opts = brushDeposit(st.brush);
-      const rgb = hexToRGB(st.color);
-      const stepLen = Math.max(1.2, st.brush.size * 0.28);
-      const dx = to.x - from.x;
-      const dy = to.y - from.y;
-      const len = Math.hypot(dx, dy);
-      const n = Math.max(1, Math.ceil(len / stepLen));
-      const pr = current.current?.points.at(-1)?.p ?? 0.5;
-      const radius = st.brush.size * (0.35 + 0.65 * pr) * SIM_SCALE;
-      const sym = st.symmetry;
-      for (let i = 1; i <= n; i++) {
-        const t = i / n;
-        const wx = from.x + dx * t;
-        const wy = from.y + dy * t;
-        depositAt(s, wx, wy, radius, pr, rgb, opts);
-        if (sym.enabled) {
-          for (const p of symmetryPoints(wx, wy, sym))
-            depositAt(s, p.x, p.y, radius, pr, rgb, opts);
-        }
-      }
-    },
-    []
-  );
+  }, []);
 
   // ---- pointer handlers ----
   const onPointerDown = (e: React.PointerEvent) => {
@@ -252,9 +196,8 @@ export default function Canvas() {
       points: [pt],
       color: st.color,
       brush: { ...st.brush },
+      createdAt: performance.now(),
     };
-    lastDab.current = { x: pt.x, y: pt.y };
-    depositSegment({ x: pt.x, y: pt.y }, { x: pt.x + 0.01, y: pt.y });
     markDirty();
   };
 
@@ -278,15 +221,12 @@ export default function Canvas() {
     const events = coalesced && coalesced.length ? coalesced : [e.nativeEvent];
     for (const ce of events) {
       const cw = toWorld(ce.clientX - rect.left, ce.clientY - rect.top);
-      const pt: Point = {
+      current.current.points.push({
         x: snap(cw.x, st),
         y: snap(cw.y, st),
         p: pressure(ce),
         t: performance.now(),
-      };
-      current.current.points.push(pt);
-      if (lastDab.current) depositSegment(lastDab.current, { x: pt.x, y: pt.y });
-      lastDab.current = { x: pt.x, y: pt.y };
+      });
     }
     markDirty();
   };
@@ -301,7 +241,6 @@ export default function Canvas() {
     const cur = current.current;
     drawingId.current = null;
     current.current = null;
-    lastDab.current = null;
     if (cur.points.length === 0) return;
     st.addStroke(cur);
     if (st.symmetry.enabled) {
@@ -376,49 +315,7 @@ export default function Canvas() {
   );
 }
 
-// ---- deposition helpers (sim space) ----
-function depositAt(
-  s: InkSim,
-  wx: number,
-  wy: number,
-  radius: number,
-  pr: number,
-  rgb: [number, number, number],
-  opts: { water: number; pigment: number; noise: number }
-) {
-  const { sx, sy } = worldToSim(wx, wy);
-  s.deposit(sx, sy, radius, pr, rgb, opts);
-}
-
-function stampStroke(s: InkSim, stroke: Stroke) {
-  const rgb = hexToRGB(stroke.color);
-  const pts = stroke.points;
-  const stepLen = Math.max(1.2, stroke.brush.size * 0.28);
-  for (let i = 0; i < pts.length; i++) {
-    const radius = stroke.brush.size * (0.35 + 0.65 * pts[i].p) * SIM_SCALE;
-    const { sx, sy } = worldToSim(pts[i].x, pts[i].y);
-    s.stampDry(sx, sy, radius, pts[i].p, rgb);
-    if (i > 0) {
-      const a = pts[i - 1];
-      const b = pts[i];
-      const len = Math.hypot(b.x - a.x, b.y - a.y);
-      const n = Math.ceil(len / stepLen);
-      for (let k = 1; k < n; k++) {
-        const t = k / n;
-        const mx = a.x + (b.x - a.x) * t;
-        const my = a.y + (b.y - a.y) * t;
-        const r =
-          stroke.brush.size *
-          (0.35 + 0.65 * (a.p + (b.p - a.p) * t)) *
-          SIM_SCALE;
-        const sp = worldToSim(mx, my);
-        s.stampDry(sp.sx, sp.sy, r, a.p + (b.p - a.p) * t, rgb);
-      }
-    }
-  }
-}
-
-// ---- misc helpers ----
+// ---- helpers ----
 function pressure(e: { pressure?: number; pointerType?: string }) {
   const p = e.pressure ?? 0;
   if (!p || (e.pointerType === "mouse" && p === 0.5)) return 0.5;
@@ -429,33 +326,6 @@ function snap(v: number, st: ReturnType<typeof useStudio.getState>) {
   if (st.grid.snap && st.grid.size > 0)
     return Math.round(v / st.grid.size) * st.grid.size;
   return v;
-}
-
-function symmetryPoints(
-  x: number,
-  y: number,
-  sym: { axes: number; mirror: boolean }
-): { x: number; y: number }[] {
-  const cx = SHEET_W / 2;
-  const cy = SHEET_H / 2;
-  const px = x - cx;
-  const py = y - cy;
-  const out: { x: number; y: number }[] = [];
-  const axes = Math.max(1, sym.axes);
-  for (let a = 0; a < axes; a++) {
-    const ang = (a / axes) * Math.PI * 2;
-    const cos = Math.cos(ang);
-    const sin = Math.sin(ang);
-    if (a > 0)
-      out.push({ x: cx + (px * cos - py * sin), y: cy + (px * sin + py * cos) });
-    if (sym.mirror) {
-      const rx = px * cos + py * sin;
-      const ry = -px * sin + py * cos;
-      const mx = -rx;
-      out.push({ x: cx + (mx * cos - ry * sin), y: cy + (mx * sin + ry * cos) });
-    }
-  }
-  return out;
 }
 
 function symmetryStrokes(

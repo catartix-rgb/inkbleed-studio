@@ -98,18 +98,28 @@ lib/
 
 ### The ink engine (`lib/inkSim.ts`)
 
-A grid of `Float32Array` fields over a fixed paper sheet. Each tick, over an
-**active dirty region** (idle cost ≈ 0):
+The painted image is a **pure, deterministic function of the stroke list** — so
+undo, redo and any redraw are **pixel-identical by construction** (verified: 0
+differing pixels after an undo). There is no stateful alpha accumulation to drift.
 
-1. **Flow** — water levels across cells and is wicked into thirsty dry fibres
-   (capillary action), biased by **fibre direction**, damped by **viscosity** and
-   **spread resistance**.
-2. **Advection** — suspended pigment (with colour) moves with the water → bleeding
-   & feathering.
-3. **Absorption** — water soaks into the paper, fixing pigment; extra pigment is
-   trapped at the drying rim → **edge darkening**.
-4. **Drying** — water evaporates; when a cell dries, remaining pigment stains the
-   fibres → **pooling / uneven absorption**.
+Each frame the pigment field (`Float32Array` over the sheet) is rebuilt from the
+strokes:
+
+1. **Stamp** — every stroke deposits pigment along its centreline with a core +
+   bleed falloff. The bleed grows with stroke age (capillary spread that freezes
+   when dry), with a ragged, deterministic edge from value noise (paper tooth) and
+   a rim term for **edge darkening**.
+2. **Drying** — pigment darkness is a deterministic function of stroke age: wet ink
+   renders lighter and spreads, then darkens and settles to full richness as it
+   dries (`drying speed`, `drying contrast`).
+3. **Composite (subtractive optics)** — accumulated pigment density attenuates the
+   paper colour per channel via **Beer–Lambert** transmittance (`T = e^(−k·P·a)`),
+   not alpha. Dense / overlapping ink converges to a deep, rich black; coloured ink
+   keeps its hue. `pigment density`, `ink darkness`, `black point` and `saturation`
+   shape the response.
+
+Because pigment is modelled as optical density rather than alpha, overlaps darken
+realistically and fully-dried black reaches a true rich black instead of grey.
 
 ### Vector preservation
 
@@ -126,7 +136,8 @@ Illustrator, Figma and Inkscape.
 | Brush | Pressure sensitivity, stabilization, 5 engines: Ink Bleed · Marker · Pencil · Calligraphy · Rough |
 | Ink physics | Bleeding, capillary action, pigment accumulation, edge darkening, drying, pooling, feathering, uneven absorption, live post-stroke evolution |
 | Paper | 6 substrates (Bristol · Newsprint · Rice · Handmade · Cardboard · Fabric) + absorbency, roughness, grain, density, fibre direction/strength, wetness, spread resistance |
-| InkBleed Lab | Viscosity, pigment concentration, absorption, edge darkening, flow noise, drying speed, evaporation, brush water load — all live |
+| InkBleed Lab | Pigment load, **pigment density, ink darkness, saturation, drying contrast, black point**, edge darkening, feathering noise, drying speed, brush water load — all live |
+| Pigment optics | Subtractive Beer–Lambert compositing (not alpha): rich blacks, true overlap darkening, deterministic undo/redo |
 | Vectorize | RDP, optimized Béziers, minimal anchors, 7 interpretation modes, path-simplification slider |
 | Export | SVG · PDF · EPS (true vector) · transparent PNG · 4K PNG — crisp at any scale |
 | UI | Dark / light, keyboard shortcuts, live stats |

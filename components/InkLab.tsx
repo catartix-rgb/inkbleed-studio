@@ -172,19 +172,10 @@ export default function InkLab() {
 
       <section className="flex flex-col gap-3 border-t pt-4 hairline">
         <h3 className="text-[11px] font-semibold uppercase tracking-widest text-[var(--fg-soft)]">
-          Ink Material
+          Pigment &amp; Ink
         </h3>
         <Slider
-          label="Viscosity"
-          value={ink.viscosity}
-          min={0}
-          max={1}
-          step={0.01}
-          onChange={(v) => setInkParam({ viscosity: v })}
-          fmt={pct}
-        />
-        <Slider
-          label="Pigment concentration"
+          label="Pigment load"
           value={ink.pigment}
           min={0}
           max={1}
@@ -193,13 +184,31 @@ export default function InkLab() {
           fmt={pct}
         />
         <Slider
-          label="Absorption rate"
-          value={ink.absorption}
+          label="Pigment density"
+          value={ink.density}
           min={0}
           max={1}
           step={0.01}
-          onChange={(v) => setInkParam({ absorption: v })}
+          onChange={(v) => setInkParam({ density: v })}
           fmt={pct}
+        />
+        <Slider
+          label="Ink darkness"
+          value={ink.darkness}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(v) => setInkParam({ darkness: v })}
+          fmt={pct}
+        />
+        <Slider
+          label="Saturation"
+          value={ink.saturation}
+          min={0}
+          max={2}
+          step={0.01}
+          onChange={(v) => setInkParam({ saturation: v })}
+          fmt={(v) => `${Math.round(v * 100)}%`}
         />
         <Slider
           label="Edge darkening"
@@ -211,7 +220,7 @@ export default function InkLab() {
           fmt={pct}
         />
         <Slider
-          label="Flow noise"
+          label="Feathering noise"
           value={ink.noise}
           min={0}
           max={1}
@@ -223,7 +232,7 @@ export default function InkLab() {
 
       <section className="flex flex-col gap-3 border-t pt-4 hairline">
         <h3 className="text-[11px] font-semibold uppercase tracking-widest text-[var(--fg-soft)]">
-          Drying Engine
+          Drying &amp; Contrast
         </h3>
         <Slider
           label="Drying speed"
@@ -235,12 +244,21 @@ export default function InkLab() {
           fmt={pct}
         />
         <Slider
-          label="Evaporation"
-          value={ink.evaporation}
+          label="Drying contrast"
+          value={ink.dryingContrast}
           min={0}
           max={1}
           step={0.01}
-          onChange={(v) => setInkParam({ evaporation: v })}
+          onChange={(v) => setInkParam({ dryingContrast: v })}
+          fmt={pct}
+        />
+        <Slider
+          label="Black point"
+          value={ink.blackPoint}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(v) => setInkParam({ blackPoint: v })}
           fmt={pct}
         />
         <Slider

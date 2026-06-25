@@ -14,6 +14,7 @@ import {
   layoutToEPS,
   layoutToPNG,
   logoMasterZip,
+  canvasRaster,
   type ExportMode,
 } from "@/lib/exporter";
 
@@ -66,6 +67,17 @@ export default function VectorPanel() {
     setBusy(kind);
     try {
       const name = fileName();
+      const st = useStudio.getState();
+      // Canvas Export — WYSIWYE raster, no vectorization
+      if (kind === "canvaspng" || kind === "canvasjpg") {
+        const mime = kind === "canvasjpg" ? "image/jpeg" : "image/png";
+        const ext = kind === "canvasjpg" ? "jpg" : "png";
+        download(
+          await canvasRaster(st.strokes, st.paper, st.ink, m.pxW, m.pxH, { mime }),
+          `${name}-wysiwye.${ext}`
+        );
+        return;
+      }
       const layout = buildLayout(args(exportMode));
       if (kind === "svg") {
         download(
@@ -88,8 +100,22 @@ export default function VectorPanel() {
       } else if (kind === "master") {
         const faithful = buildLayout(args("faithful"));
         const clean = buildLayout(args("clean"));
+        const wysiwye = await canvasRaster(
+          st.strokes,
+          st.paper,
+          st.ink,
+          Math.min(m.pxW, 4096),
+          Math.min(m.pxH, Math.round((4096 * m.pxH) / m.pxW)),
+          {}
+        );
         download(
-          await logoMasterZip(faithful, clean, `inkbleed-${artboard.id}`, Math.min(m.pxW, 4096)),
+          await logoMasterZip(
+            faithful,
+            clean,
+            `inkbleed-${artboard.id}`,
+            Math.min(m.pxW, 4096),
+            wysiwye
+          ),
           `${name}-logo-master.zip`
         );
       }
@@ -194,18 +220,24 @@ export default function VectorPanel() {
           <h3 className="text-[11px] font-semibold uppercase tracking-widest text-[var(--fg-soft)]">
             Export Engine
           </h3>
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-3 gap-1">
+            <ModeTab
+              active={exportMode === "canvas"}
+              onClick={() => setExportMode("canvas")}
+              title="Canvas"
+              sub="WYSIWYE raster"
+            />
             <ModeTab
               active={exportMode === "faithful"}
               onClick={() => setExportMode("faithful")}
-              title="Faithful Ink"
-              sub="Traces real ink · texture, edges, bleed"
+              title="Faithful"
+              sub="Traced vector"
             />
             <ModeTab
               active={exportMode === "clean"}
               onClick={() => setExportMode("clean")}
-              title="Clean Logo"
-              sub="Optimized Bézier · minimal anchors"
+              title="Clean"
+              sub="Optimized"
             />
           </div>
         </section>
@@ -271,20 +303,39 @@ export default function VectorPanel() {
             calligraphic contrast are preserved. Higher node count by design.
           </p>
         )}
+        {exportMode === "canvas" && (
+          <p className="rounded-md border p-3 text-[11px] leading-relaxed text-[var(--fg-soft)] hairline">
+            Canvas export is what-you-see-is-what-you-export: a raster identical
+            to the preview — paper texture, ink bleed, drying, pigment build-up,
+            feathering and grain, with no vectorization or cleanup.
+          </p>
+        )}
       </div>
 
       {/* Export */}
       <div className="mt-auto border-t p-4 hairline">
         <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-[var(--fg-soft)]">
-          Export · {exportMode === "faithful" ? "Faithful Ink" : "Clean Logo"}
+          Export ·{" "}
+          {exportMode === "canvas"
+            ? "Canvas (WYSIWYE)"
+            : exportMode === "faithful"
+            ? "Faithful Ink"
+            : "Clean Logo"}
         </h3>
-        <div className="grid grid-cols-2 gap-2">
-          <ExportButton label="SVG" sub="vector" onClick={() => doExport("svg")} busy={busy === "svg"} disabled={strokeCount === 0} />
-          <ExportButton label="PDF" sub="print vector" onClick={() => doExport("pdf")} busy={busy === "pdf"} disabled={strokeCount === 0} />
-          <ExportButton label="EPS" sub="Illustrator" onClick={() => doExport("eps")} busy={busy === "eps"} disabled={strokeCount === 0} />
-          <ExportButton label="PNG" sub="transparent" onClick={() => doExport("png")} busy={busy === "png"} disabled={strokeCount === 0} />
-          <ExportButton label={`PNG @ ${dpi}`} sub={`${m.pxW}px`} onClick={() => doExport("pngflat")} busy={busy === "pngflat"} disabled={strokeCount === 0} wide />
-        </div>
+        {exportMode === "canvas" ? (
+          <div className="grid grid-cols-2 gap-2">
+            <ExportButton label={`PNG @ ${dpi}`} sub={`${m.pxW}px · paper`} onClick={() => doExport("canvaspng")} busy={busy === "canvaspng"} disabled={strokeCount === 0} />
+            <ExportButton label="JPG" sub={`${m.pxW}px`} onClick={() => doExport("canvasjpg")} busy={busy === "canvasjpg"} disabled={strokeCount === 0} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <ExportButton label="SVG" sub="vector" onClick={() => doExport("svg")} busy={busy === "svg"} disabled={strokeCount === 0} />
+            <ExportButton label="PDF" sub="print vector" onClick={() => doExport("pdf")} busy={busy === "pdf"} disabled={strokeCount === 0} />
+            <ExportButton label="EPS" sub="Illustrator" onClick={() => doExport("eps")} busy={busy === "eps"} disabled={strokeCount === 0} />
+            <ExportButton label="PNG" sub="transparent" onClick={() => doExport("png")} busy={busy === "png"} disabled={strokeCount === 0} />
+            <ExportButton label={`PNG @ ${dpi}`} sub={`${m.pxW}px`} onClick={() => doExport("pngflat")} busy={busy === "pngflat"} disabled={strokeCount === 0} wide />
+          </div>
+        )}
         <button
           onClick={() => doExport("master")}
           disabled={strokeCount === 0 || busy === "master"}

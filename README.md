@@ -139,7 +139,15 @@ immediately distinguishable, even in black and white:
 - **Rough Brush** — dry brush. Separate bristle tracks that lift off the paper,
   broken edges, missing-pigment gaps, uneven pressure response.
 
-### Dual export — Faithful vs Clean (`lib/exporter.ts`, `lib/trace.ts`)
+### Triple export — Canvas / Faithful / Clean (`lib/exporter.ts`, `lib/trace.ts`)
+
+**Canvas Export (WYSIWYE)** is a raster capture visually identical to the
+preview — paper texture, ink bleed, drying, pigment build-up, feathering and
+grain, with no vectorization. It upscales the exact composited ink+paper image
+the canvas displays, to the artboard's pixel size at the chosen DPI (PNG/JPG).
+
+**Split View** (top bar) shows Original Paper, Faithful Vector and Clean Logo
+side by side, updating live while you draw (the faithful trace is debounced).
 
 The canvas is the source of truth. **Faithful Ink Export** marching-squares-traces
 the *actual rendered ink coverage field* (the same one shown on screen) into
@@ -173,7 +181,8 @@ Illustrator, Figma and Inkscape.
 | Pigment optics | Subtractive Beer–Lambert compositing (not alpha): rich blacks, true overlap darkening, deterministic undo/redo |
 | Vectorize | RDP, optimized Béziers, minimal anchors, 7 interpretation modes, path-simplification slider |
 | Artboard | Presets (A0–A6, Letter/Legal/Tabloid, social, Poster, Billboard) + custom W/H in px/mm/cm/in, 72–1200 DPI |
-| Export | Dual engine — Faithful Ink (traces real ink) or Clean Logo (optimized Bézier) · SVG / PDF / EPS / transparent PNG / DPI PNG · Logo Master ZIP bundle |
+| Export | Triple engine — **Canvas (WYSIWYE raster)**, Faithful Ink (traces real ink) or Clean Logo (optimized Bézier) · SVG / PDF / EPS / PNG / JPG / DPI · Logo Master ZIP bundle |
+| Split View | Live 3-up comparison — Original Paper · Faithful Vector · Clean Logo, updated while drawing |
 | UI | Dark / light, keyboard shortcuts, live stats |
 
 ### Shortcuts

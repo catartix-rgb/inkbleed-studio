@@ -448,6 +448,11 @@ export class InkSim {
     return strokes.length > 0;
   }
 
+  /** The last composited paper+ink image (for WYSIWYE raster export). */
+  getImage(): ImageData {
+    return this.image;
+  }
+
   /**
    * Per-cell ink coverage (0..1) + pigment-weighted dominant ink colour,
    * derived with the same Beer–Lambert response used on screen. This is the

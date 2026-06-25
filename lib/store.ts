@@ -18,7 +18,7 @@ import {
 import { type Artboard, type Unit, PRESETS, metrics } from "./artboard";
 import { setSheet } from "./sheet";
 
-export type ExportMode = "clean" | "faithful";
+export type ExportMode = "canvas" | "faithful" | "clean";
 
 export interface GridConfig {
   visible: boolean;
@@ -56,6 +56,8 @@ interface StudioState {
   artboard: Artboard;
   dpi: number;
   exportMode: ExportMode;
+  /** 3-up live comparison: paper · faithful vector · clean logo */
+  splitView: boolean;
   /** bumped when the working sheet is reshaped (artboard aspect change) */
   sheetRevision: number;
 
@@ -93,6 +95,7 @@ interface StudioState {
   setCustomArtboard: (w: number, h: number, unit: Unit) => void;
   setDpi: (dpi: number) => void;
   setExportMode: (m: ExportMode) => void;
+  toggleSplit: () => void;
 }
 
 const A4 = PRESETS.find((p) => p.id === "a4")!;
@@ -134,6 +137,7 @@ export const useStudio = create<StudioState>((set) => ({
   artboard: { ...A4 },
   dpi: 300,
   exportMode: "faithful",
+  splitView: false,
   sheetRevision: 0,
 
   addStroke: (s) =>
@@ -244,4 +248,5 @@ export const useStudio = create<StudioState>((set) => ({
     }),
   setDpi: (dpi) => set({ dpi }),
   setExportMode: (m) => set({ exportMode: m }),
+  toggleSplit: () => set((st) => ({ splitView: !st.splitView })),
 }));

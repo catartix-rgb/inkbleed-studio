@@ -1,7 +1,7 @@
 "use client";
 
 import { useStudio } from "@/lib/store";
-import { SunIcon, MoonIcon, VectorIcon, TargetIcon } from "./Icons";
+import { SunIcon, MoonIcon, VectorIcon, TargetIcon, SplitIcon } from "./Icons";
 
 export default function TopBar() {
   const theme = useStudio((s) => s.theme);
@@ -10,6 +10,8 @@ export default function TopBar() {
   const toggleVector = useStudio((s) => s.toggleVector);
   const resetView = useStudio((s) => s.resetView);
   const mode = useStudio((s) => s.mode);
+  const splitView = useStudio((s) => s.splitView);
+  const toggleSplit = useStudio((s) => s.toggleSplit);
 
   return (
     <header className="flex h-12 items-center justify-between border-b px-3 hairline">
@@ -50,6 +52,16 @@ export default function TopBar() {
         >
           <VectorIcon width={15} height={15} />
           <span className="hidden md:inline">Vector</span>
+        </button>
+        <button
+          onClick={toggleSplit}
+          title="Split view — paper · faithful · clean"
+          className={`btn flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs ${
+            splitView ? "btn-active" : ""
+          }`}
+        >
+          <SplitIcon width={15} height={15} />
+          <span className="hidden md:inline">Split</span>
         </button>
         <button
           onClick={toggleTheme}

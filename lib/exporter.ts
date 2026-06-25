@@ -25,7 +25,7 @@ export interface Layout {
   color: string;
 }
 
-export type ExportMode = "clean" | "faithful";
+export type ExportMode = "canvas" | "faithful" | "clean";
 
 interface BuildArgs {
   strokes: Stroke[];
@@ -296,6 +296,44 @@ export async function layoutToPNG(
 }
 
 /**
+ * Canvas Export (WYSIWYE) — a raster capture that is visually identical to the
+ * on-screen preview: paper texture, ink bleed, drying, pigment accumulation,
+ * edge feathering, brush texture and grain are all kept. No vectorization.
+ * The composited ink+paper image is upscaled exactly as the canvas displays it.
+ */
+export async function canvasRaster(
+  strokes: Stroke[],
+  paper: PaperParams,
+  ink: InkParams,
+  pxW: number,
+  pxH: number,
+  opts: { mime?: string; withPaper?: boolean } = {}
+): Promise<Blob> {
+  const sim = renderDryField(SHEET.simW, SHEET.simH, paper, ink, strokes);
+  const img = sim.getImage();
+  const src = document.createElement("canvas");
+  src.width = SHEET.simW;
+  src.height = SHEET.simH;
+  src.getContext("2d")!.putImageData(img, 0, 0);
+
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(pxW));
+  out.height = Math.max(1, Math.round(pxH));
+  const octx = out.getContext("2d")!;
+  octx.imageSmoothingEnabled = true;
+  octx.imageSmoothingQuality = "high";
+  if (opts.mime === "image/jpeg") {
+    octx.fillStyle = "#ffffff";
+    octx.fillRect(0, 0, out.width, out.height);
+  }
+  octx.drawImage(src, 0, 0, SHEET.simW, SHEET.simH, 0, 0, out.width, out.height);
+  const mime = opts.mime ?? "image/png";
+  return new Promise((res, rej) =>
+    out.toBlob((b) => (b ? res(b) : rej(new Error("toBlob failed"))), mime, 0.95)
+  );
+}
+
+/**
  * Logo Master Export — one operation produces a full brand package:
  * master SVG (faithful + clean), print PDF, transparent PNG, monochrome,
  * inverted, outlined, plus a source vector bundle. Returned as a single .zip.
@@ -304,11 +342,15 @@ export async function logoMasterZip(
   faithful: Layout,
   clean: Layout,
   name: string,
-  pngPxW: number
+  pngPxW: number,
+  canvasPng?: Blob
 ): Promise<Blob> {
   const { makeZip, strBytes, blobBytes } = await import("./zip");
   const svg = (s: string) => strBytes(s);
   const entries = [
+    ...(canvasPng
+      ? [{ name: `${name}/canvas-wysiwye.png`, data: await blobBytes(canvasPng) }]
+      : []),
     { name: `${name}/master-faithful.svg`, data: svg(layoutToSVG(faithful, { transparent: true })) },
     { name: `${name}/master-clean.svg`, data: svg(layoutToSVG(clean, { transparent: true })) },
     { name: `${name}/print.pdf`, data: await blobBytes(layoutToPDF(faithful)) },

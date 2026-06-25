@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useStudio } from "@/lib/store";
 import Canvas from "@/components/Canvas";
+import SplitView from "@/components/SplitView";
 import VectorOverlay from "@/components/VectorOverlay";
 import Toolbar from "@/components/Toolbar";
 import LeftPanel from "@/components/LeftPanel";
@@ -12,6 +13,7 @@ import StatusBar from "@/components/StatusBar";
 
 export default function Page() {
   const theme = useStudio((s) => s.theme);
+  const splitView = useStudio((s) => s.splitView);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
@@ -37,9 +39,16 @@ export default function Page() {
 
         {/* Canvas */}
         <main className="relative min-w-0 flex-1">
-          {mounted && <Canvas />}
-          <VectorOverlay />
-          <ModeHud />
+          {mounted &&
+            (splitView ? (
+              <SplitView />
+            ) : (
+              <>
+                <Canvas />
+                <VectorOverlay />
+                <ModeHud />
+              </>
+            ))}
         </main>
 
         {/* Right panel */}

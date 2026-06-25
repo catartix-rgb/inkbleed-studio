@@ -190,6 +190,7 @@ export default function Canvas() {
       y: snap(w.y, st),
       p: pressure(e),
       t: performance.now(),
+      ...tilt(e),
     };
     current.current = {
       id: newId(),
@@ -226,6 +227,7 @@ export default function Canvas() {
         y: snap(cw.y, st),
         p: pressure(ce),
         t: performance.now(),
+        ...tilt(ce),
       });
     }
     markDirty();
@@ -320,6 +322,14 @@ function pressure(e: { pressure?: number; pointerType?: string }) {
   const p = e.pressure ?? 0;
   if (!p || (e.pointerType === "mouse" && p === 0.5)) return 0.5;
   return Math.max(0.05, Math.min(1, p));
+}
+
+function tilt(e: { tiltX?: number; tiltY?: number }): { tx: number; ty: number } {
+  // tiltX/tiltY are degrees in [-90,90]; normalize to [-1,1]
+  return {
+    tx: Math.max(-1, Math.min(1, (e.tiltX ?? 0) / 90)),
+    ty: Math.max(-1, Math.min(1, (e.tiltY ?? 0) / 90)),
+  };
 }
 
 function snap(v: number, st: ReturnType<typeof useStudio.getState>) {

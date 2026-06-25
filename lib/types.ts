@@ -25,6 +25,9 @@ export interface Point {
   p: number;
   /** timestamp in ms */
   t: number;
+  /** pen tilt vector, each component -1..1 (0 when device reports none) */
+  tx?: number;
+  ty?: number;
 }
 
 export interface BrushSettings {
@@ -41,6 +44,8 @@ export interface BrushSettings {
   opacity: number;
   /** 0..1 — water load fed into the ink simulation */
   wet: number;
+  /** calligraphy nib rotation / pencil shading direction, in radians */
+  angle: number;
 }
 
 export interface Stroke {

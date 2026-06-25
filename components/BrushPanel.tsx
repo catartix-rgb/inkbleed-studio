@@ -4,11 +4,11 @@ import { useStudio } from "@/lib/store";
 import type { BrushStyle } from "@/lib/types";
 
 const STYLES: { id: BrushStyle; label: string; hint: string }[] = [
-  { id: "inkbleed", label: "Ink Bleed", hint: "Spreading ink, organic edges" },
-  { id: "marker", label: "Marker", hint: "Flat, saturated, semi-dry" },
-  { id: "pencil", label: "Pencil", hint: "Grainy graphite texture" },
-  { id: "calligraphy", label: "Calligraphy", hint: "Broad-nib angle weight" },
-  { id: "rough", label: "Rough Brush", hint: "Broken, scratchy strokes" },
+  { id: "inkbleed", label: "Ink Bleed", hint: "Liquid India ink · capillary bleed, dark rims" },
+  { id: "marker", label: "Marker", hint: "Copic felt-tip · flat, crisp, pressure→width" },
+  { id: "pencil", label: "Pencil", hint: "Graphite · paper tooth, gaps, tilt shading" },
+  { id: "calligraphy", label: "Calligraphy", hint: "Flat nib · angle width, chiselled ends" },
+  { id: "rough", label: "Rough Brush", hint: "Dry brush · bristle streaks, broken edges" },
 ];
 
 const SWATCHES = [
@@ -149,6 +149,17 @@ export default function BrushPanel() {
           onChange={(v) => setBrush({ opacity: v })}
           fmt={(v) => `${Math.round(v * 100)}%`}
         />
+        {(brush.style === "calligraphy" || brush.style === "pencil") && (
+          <Slider
+            label={brush.style === "calligraphy" ? "Nib angle" : "Shading angle"}
+            value={brush.angle}
+            min={-Math.PI / 2}
+            max={Math.PI / 2}
+            step={0.01}
+            onChange={(v) => setBrush({ angle: v })}
+            fmt={(v) => `${Math.round((v * 180) / Math.PI)}°`}
+          />
+        )}
       </section>
 
       <section>

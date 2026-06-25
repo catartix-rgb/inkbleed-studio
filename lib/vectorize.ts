@@ -11,20 +11,44 @@ import {
   dist,
 } from "./geometry";
 
+/** Per-brush vectorization character, so each tool traces differently. */
+interface VecProfile {
+  /** baseline half-width multiplier */
+  width: number;
+  /** how much pen pressure modulates width (0 = uniform) */
+  press: number;
+  /** broad-nib angle width model */
+  nib: boolean;
+  /** edge-irregularity multiplier (graphite/dry = ragged, marker = clean) */
+  rough: number;
+  /** end-taper multiplier (marker blunt, ink/calligraphy pointed) */
+  taper: number;
+  /** extra simplification (×) — pencil keeps more anchors */
+  simplify: number;
+}
+
+const VEC: Record<string, VecProfile> = {
+  inkbleed: { width: 1.0, press: 0.7, nib: false, rough: 1.0, taper: 1.0, simplify: 1.0 },
+  marker: { width: 0.96, press: 0.45, nib: false, rough: 0.2, taper: 0.15, simplify: 1.2 },
+  pencil: { width: 0.62, press: 0.55, nib: false, rough: 1.9, taper: 0.6, simplify: 0.6 },
+  calligraphy: { width: 0.9, press: 0.25, nib: true, rough: 0.35, taper: 0.8, simplify: 1.1 },
+  rough: { width: 1.05, press: 0.6, nib: false, rough: 2.4, taper: 0.25, simplify: 0.8 },
+};
+
 /**
- * Build a variable-width outline polygon for a single stroke.
- * The personality of the gesture is preserved: pressure -> width,
- * mode roughness -> retained edge irregularity, taper -> stroke ends.
+ * Build a variable-width outline polygon for a single stroke. Each brush has its
+ * own width model, edge roughness, taper and anchor density (see VEC), so the
+ * vector output is as distinguishable as the rendered ink.
  */
 function strokeOutline(stroke: Stroke, mode: ModeProfile): Vec[] {
+  const vp = VEC[stroke.brush.style] ?? VEC.inkbleed;
   const smoothed = stabilize(stroke.points, stroke.brush.stability * 0.6);
   const spacing = Math.max(2, stroke.brush.size * 0.35);
   const pts = resample(smoothed, spacing);
   if (pts.length < 2) {
-    // a dot — emit a small polygon
     const c = pts[0] ?? stroke.points[0];
     if (!c) return [];
-    const r = stroke.brush.size * 0.5 * mode.widthBoost;
+    const r = stroke.brush.size * 0.5 * mode.widthBoost * vp.width;
     return Array.from({ length: 12 }, (_, i) => {
       const a = (i / 12) * Math.PI * 2;
       return { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r };
@@ -34,32 +58,32 @@ function strokeOutline(stroke: Stroke, mode: ModeProfile): Vec[] {
   const n = pts.length;
   const left: Vec[] = [];
   const right: Vec[] = [];
+  const taper = mode.taper * vp.taper;
 
   for (let i = 0; i < n; i++) {
     const prev = pts[Math.max(0, i - 1)];
     const next = pts[Math.min(n - 1, i + 1)];
-    // averaged normal => smooth offset on curves
     const nm = normal(prev, next);
 
-    // taper toward the two ends
     const tEnd = Math.min(i, n - 1 - i) / Math.max(1, (n - 1) / 2);
-    const taperAmt = 1 - mode.taper * (1 - Math.min(1, tEnd));
+    const taperAmt = 1 - taper * (1 - Math.min(1, tEnd));
 
-    const pressW =
-      1 - stroke.brush.pressure + stroke.brush.pressure * (0.4 + pts[i].p);
-    let w =
-      stroke.brush.size * 0.5 * mode.widthBoost * pressW * taperAmt;
+    const pressW = 1 - vp.press + vp.press * (0.4 + pts[i].p);
+    let w = stroke.brush.size * 0.5 * mode.widthBoost * vp.width * pressW * taperAmt;
 
-    // calligraphy: width depends on stroke angle (broad-nib effect)
-    if (stroke.brush.style === "calligraphy") {
+    if (vp.nib) {
+      // broad-nib: thin parallel to the nib, thick across it
       const ang = Math.atan2(next.y - prev.y, next.x - prev.x);
-      const nib = Math.abs(Math.cos(ang - Math.PI / 4));
-      w *= 0.35 + 1.2 * nib;
+      const nibFac = Math.abs(Math.sin(ang - stroke.brush.angle));
+      w *= 0.18 + 1.3 * nibFac;
     }
 
-    // retained imperfection — deterministic so re-renders are stable
+    // retained imperfection — deterministic, scaled by per-brush roughness
     const noiseAmt =
-      stroke.brush.bleed * mode.roughness * Math.min(8, stroke.brush.size * 0.5);
+      stroke.brush.bleed *
+      mode.roughness *
+      vp.rough *
+      Math.min(8, stroke.brush.size * 0.5);
     const ln = seededNoise(i * 1.3 + stroke.id.length) * noiseAmt;
     const rn = seededNoise(i * 2.7 + stroke.id.length * 3) * noiseAmt;
 
@@ -69,7 +93,7 @@ function strokeOutline(stroke: Stroke, mode: ModeProfile): Vec[] {
 
   let outline = left.concat(right.reverse());
   if (mode.chaikin > 0) outline = chaikin(outline, mode.chaikin);
-  const eps = Math.max(0.4, stroke.brush.size * 0.06 * mode.simplify);
+  const eps = Math.max(0.4, stroke.brush.size * 0.06 * mode.simplify * vp.simplify);
   outline = rdp(outline, eps);
   return outline;
 }

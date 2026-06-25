@@ -121,6 +121,24 @@ strokes:
 Because pigment is modelled as optical density rather than alpha, overlaps darken
 realistically and fully-dried black reaches a true rich black instead of grey.
 
+### The five brushes (`lib/inkSim.ts`)
+
+Each tool has its own stroke generation, pressure response, pigment behaviour,
+paper coupling, drying and vectorization — drawn with the same line they are
+immediately distinguishable, even in black and white:
+
+- **Ink Bleed** — liquid India ink. Soft round nib, capillary bleed that grows
+  with paper absorbency and freezes when dry, feathered + darkened rim, rich black.
+- **Marker** — Copic felt-tip. Flat saturated coverage, crisp edges, faint dry
+  streaks, pressure drives width far more than opacity, fast drying, layered overlaps.
+- **Pencil** — graphite. Deposits only on the raised paper tooth (natural gaps),
+  pressure controls darkness, reads as desaturated grey, tilt → broad light shading.
+- **Calligraphy** — flat broad nib. Width = nib projection onto the travel
+  direction (thin parallel, thick across), chiselled ends, pooling on direction
+  changes, adjustable nib rotation.
+- **Rough Brush** — dry brush. Separate bristle tracks that lift off the paper,
+  broken edges, missing-pigment gaps, uneven pressure response.
+
 ### Vector preservation
 
 Even as ink spreads organically, the **gesture polyline** is recorded
@@ -133,7 +151,7 @@ Illustrator, Figma and Inkscape.
 | Area | Implemented |
 |------|-------------|
 | Canvas | Physical paper sheet, infinite pan/zoom, grid, snap, radial + mirror symmetry |
-| Brush | Pressure sensitivity, stabilization, 5 engines: Ink Bleed · Marker · Pencil · Calligraphy · Rough |
+| Brush | Pressure + tilt sensitivity, stabilization, 5 physically distinct engines (see below) |
 | Ink physics | Bleeding, capillary action, pigment accumulation, edge darkening, drying, pooling, feathering, uneven absorption, live post-stroke evolution |
 | Paper | 6 substrates (Bristol · Newsprint · Rice · Handmade · Cardboard · Fabric) + absorbency, roughness, grain, density, fibre direction/strength, wetness, spread resistance |
 | InkBleed Lab | Pigment load, **pigment density, ink darkness, saturation, drying contrast, black point**, edge darkening, feathering noise, drying speed, brush water load — all live |

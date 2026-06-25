@@ -86,6 +86,7 @@ const defaultBrush: BrushSettings = {
   bleed: 0.5,
   opacity: 1,
   wet: 0.6,
+  angle: -Math.PI / 4, // classic 45° broad-nib
 };
 
 export const useStudio = create<StudioState>((set) => ({
